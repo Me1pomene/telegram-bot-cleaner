@@ -1,6 +1,8 @@
 # сюда вставляется финальный код бота вручную позже
 import os
 import asyncio
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update
@@ -201,6 +203,19 @@ async def log_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f.write(log_line)
 
 # === Запуск ===
+
+def run_healthcheck():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"I'm alive!")
+
+    server = HTTPServer(("0.0.0.0", 10000), Handler)
+    server.serve_forever()
+
+# Запускаем healthcheck сервер в отдельном потоке
+threading.Thread(target=run_healthcheck, daemon=True).start()
 
 app = ApplicationBuilder().token(TOKEN).build()
 
