@@ -1,3 +1,4 @@
+# сюда вставляется финальный код бота вручную позже
 import os
 import asyncio
 from datetime import datetime
