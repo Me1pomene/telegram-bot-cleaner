@@ -6,3 +6,5 @@ __pycache__/
 .vscode/
 bot_chats.log
 *.log
+deleted_messages.txt
+join_log.txt
