@@ -208,7 +208,10 @@ threading.Thread(target=run_healthcheck, daemon=True).start()
 
 # Настраиваем httpx с увеличенным таймаутом
 request = HTTPXRequest(
-    client=httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=30.0, connect=10.0))
+    connect_timeout=10.0,
+    read_timeout=30.0,
+    write_timeout=30.0,
+    pool_timeout=30.0,
 )
 
 app = ApplicationBuilder().token(TOKEN).request(request).build()
