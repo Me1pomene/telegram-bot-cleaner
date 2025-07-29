@@ -208,10 +208,7 @@ async def notify_on_startup(app):
     if NOTIFY_CHAT_ID:
         now = datetime.now().strftime("%d.%m.%Y %H:%M")
         try:
-            await app.bot.send_message(
-                chat_id=NOTIFY_CHAT_ID,
-                text=f"🚀 Бот запущен!\nВремя: {now}"
-            )
+            await app.bot.send_message(chat_id=NOTIFY_CHAT_ID, text=f"🚀 Бот запущен!\nВремя: {now}")
         except Exception as e:
             logging.warning(f"❗ Не удалось отправить уведомление: {e}")
 
@@ -242,5 +239,5 @@ app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, filter_ba
 app.add_handler(MessageHandler(filters.ALL, log_chat), group=-1)
 
 print("🚀 Бот запущен!")
-app.run_polling(ready=notify_on_startup)
+app.run_polling(post_init=notify_on_startup)
 
