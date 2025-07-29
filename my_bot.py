@@ -1,7 +1,8 @@
-# сюда вставляется финальный код бота вручную позже
 import os
 import asyncio
 import threading
+import logging
+import httpx
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime
 from dotenv import load_dotenv
@@ -13,11 +14,13 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 # === Настройки ===
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 ALLOWED_CHAT_IDS = [int(x.strip()) for x in os.getenv("ALLOWED_CHAT_IDS", "").split(",") if x.strip()]
+NOTIFY_CHAT_ID = int(os.getenv("NOTIFY_CHAT_ID", "0"))
 
 BANNED_WORDS_FILE = "banned_words.txt"
 JOIN_LOG = "join_log.txt"
@@ -26,7 +29,6 @@ CHAT_LOG = "bot_chats.log"
 
 banned_words = []
 
-# === Утилиты ===
 def is_allowed_chat(chat_id: int) -> bool:
     return not ALLOWED_CHAT_IDS or chat_id in ALLOWED_CHAT_IDS
 
@@ -69,6 +71,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Для списка функций — напиши /help\n"
         "По доработкам обращайся к @v_golikov"
     )
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    await update.message.reply_text(f"✅ Бот работает. Время: {now}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -125,38 +131,27 @@ async def list_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("🚫 Запрещённые слова:\n" + "\n".join(banned_words))
 
-# === События ===
-
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if not is_allowed_chat(chat.id):
         return
-
     for user in update.message.new_chat_members:
         try:
             await update.message.delete()
         except:
             pass
-
         msg = await context.bot.send_message(
             chat_id=chat.id,
             text=f"👋 Добро пожаловать, {user.mention_html()}!",
             parse_mode="HTML",
         )
-
         with open(JOIN_LOG, "a", encoding="utf-8") as f:
-            f.write(
-                f"{datetime.now()} — {user.full_name} (@{user.username}) ID:{user.id} вступил(а) в {chat.title}\n"
-            )
-
+            f.write(f"{datetime.now()} — {user.full_name} (@{user.username}) ID:{user.id} вступил(а) в {chat.title}\n")
         asyncio.create_task(delayed_delete(context.bot, chat.id, msg.message_id, delay=300))
 
 async def delete_system(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
-    if not is_allowed_chat(chat.id):
-        return
     msg = update.message
-    if not msg:
+    if not msg or not is_allowed_chat(update.effective_chat.id):
         return
     try:
         if (
@@ -182,8 +177,7 @@ async def filter_bad(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if not msg or not msg.text or not is_allowed_chat(update.effective_chat.id):
         return
-    text = msg.text.lower()
-    if any(word in text for word in banned_words):
+    if any(word in msg.text.lower() for word in banned_words):
         try:
             await msg.delete()
         except:
@@ -193,7 +187,6 @@ async def filter_bad(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"{datetime.now()} — Удалено сообщение от @{msg.from_user.username or 'без ника'}: {msg.text}\n"
             )
 
-# === Лог чатов, где бот активен ===
 async def log_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if not chat:
@@ -202,26 +195,28 @@ async def log_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(CHAT_LOG, "a", encoding="utf-8") as f:
         f.write(log_line)
 
-# === Запуск ===
-
 def run_healthcheck():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"I'm alive!")
-
     server = HTTPServer(("0.0.0.0", 10000), Handler)
     server.serve_forever()
 
-# Запускаем healthcheck сервер в отдельном потоке
 threading.Thread(target=run_healthcheck, daemon=True).start()
 
-app = ApplicationBuilder().token(TOKEN).build()
+# Настраиваем httpx с увеличенным таймаутом
+request = HTTPXRequest(
+    client=httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=30.0, connect=10.0))
+)
+
+app = ApplicationBuilder().token(TOKEN).request(request).build()
 
 # Команды
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("help", help_command))
+app.add_handler(CommandHandler("status", status_command))
 app.add_handler(CommandHandler("addword", add_word))
 app.add_handler(CommandHandler("delword", del_word))
 app.add_handler(CommandHandler("listwords", list_words))
@@ -230,9 +225,8 @@ app.add_handler(CommandHandler("listwords", list_words))
 app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
 app.add_handler(MessageHandler(filters.StatusUpdate.ALL, delete_system))
 app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, filter_bad))
-
-# Лог чатов (все входящие события)
 app.add_handler(MessageHandler(filters.ALL, log_chat), group=-1)
 
 print("🚀 Бот запущен!")
-app.run_polling()
+app.run_polling(ready=notify_on_startup)
+
