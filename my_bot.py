@@ -242,5 +242,5 @@ print("🚀 Бот запущен!")
 
 if __name__ == "__main__":
     print("🚀 Бот запущен!")
-    app.run_polling()
+    app.run_polling(post_init=notify_on_startup)
 
