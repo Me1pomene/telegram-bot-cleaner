@@ -212,9 +212,10 @@ async def notify_on_startup(app):
         except Exception as e:
             logging.warning(f"❗ Не удалось отправить уведомление: {e}")
 
+# === Запуск ===
+
 threading.Thread(target=run_healthcheck, daemon=True).start()
 
-# Настраиваем httpx с увеличенным таймаутом
 request = HTTPXRequest(
     connect_timeout=10.0,
     read_timeout=30.0,
@@ -224,7 +225,7 @@ request = HTTPXRequest(
 
 app = ApplicationBuilder().token(TOKEN).request(request).build()
 
-# Команды
+# Хендлеры
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("status", status_command))
@@ -232,12 +233,16 @@ app.add_handler(CommandHandler("addword", add_word))
 app.add_handler(CommandHandler("delword", del_word))
 app.add_handler(CommandHandler("listwords", list_words))
 
-# События
 app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
 app.add_handler(MessageHandler(filters.StatusUpdate.ALL, delete_system))
 app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, filter_bad))
 app.add_handler(MessageHandler(filters.ALL, log_chat), group=-1)
 
 print("🚀 Бот запущен!")
-app.run_polling(post_init=notify_on_startup)
+
+async def main():
+    await notify_on_startup(app)
+    await app.run_polling()
+
+asyncio.run(main())
 
