@@ -240,9 +240,7 @@ app.add_handler(MessageHandler(filters.ALL, log_chat), group=-1)
 
 print("🚀 Бот запущен!")
 
-async def main():
-    await notify_on_startup(app)
-    await app.run_polling()
-
-asyncio.run(main())
+if __name__ == "__main__":
+    print("🚀 Бот запущен!")
+    app.run_polling()
 
