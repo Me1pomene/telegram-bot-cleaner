@@ -204,6 +204,17 @@ def run_healthcheck():
     server = HTTPServer(("0.0.0.0", 10000), Handler)
     server.serve_forever()
 
+async def notify_on_startup(app):
+    if NOTIFY_CHAT_ID:
+        now = datetime.now().strftime("%d.%m.%Y %H:%M")
+        try:
+            await app.bot.send_message(
+                chat_id=NOTIFY_CHAT_ID,
+                text=f"🚀 Бот запущен!\nВремя: {now}"
+            )
+        except Exception as e:
+            logging.warning(f"❗ Не удалось отправить уведомление: {e}")
+
 threading.Thread(target=run_healthcheck, daemon=True).start()
 
 # Настраиваем httpx с увеличенным таймаутом
